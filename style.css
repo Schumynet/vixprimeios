@@ -1351,9 +1351,36 @@
 
     /* ===== FIX PER IOS SAFARI ===== */
     @supports (-webkit-touch-callout: none) {
-        /* Fix per 100vh su iOS */
         .hero {
             min-height: -webkit-fill-available;
+        }
+
+        .video-js {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .video-js video {
+            position: relative !important;
+            object-fit: contain;
+        }
+
+        .video-container {
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+        }
+
+        .vjs-tech {
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+        }
+
+        video::-webkit-media-controls {
+            display: none !important;
+        }
+
+        video::-webkit-media-controls-enclosure {
+            display: none !important;
         }
     }
     /* ===== MOBILE PLAYER FINAL FIX (Layout a 2 livelli) ===== */

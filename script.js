@@ -746,25 +746,27 @@ function showSection(sectionId) {
     }
 
 
+    // ===== RILEVAMENTO iOS =====
+    function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
     // ===== STREAMING E PLAYER =====
     async function loadVideo(isMovie, id, season = null, episode = null) {
         showLoading(true);
 
-        // --- FIX: Nascondi sempre l'avviso "Seleziona episodio" quando parte un video ---
         const warning = document.getElementById("episode-warning");
         if (warning) warning.classList.add("hidden");
-        // -------------------------------------------------------------------------------
 
         try {
             setupVideoJsXhrHook();
 
-            // 1. Pulizia player esistente
             if (player) {
                 try { player.dispose(); } catch (e) { console.warn(e); }
                 player = null;
             }
 
-            // 2. Preparazione DOM
             const videoContainer = document.querySelector(".video-container");
             const oldVideo = document.getElementById("player-video");
             if (oldVideo) oldVideo.remove();
@@ -775,50 +777,60 @@ function showSection(sectionId) {
             newVideo.setAttribute("controls", "");
             newVideo.setAttribute("preload", "auto");
             newVideo.setAttribute("playsinline", "");
+            newVideo.setAttribute("webkit-playsinline", "");
             newVideo.setAttribute("crossorigin", "anonymous");
-            
+            newVideo.setAttribute("x-webkit-airplay", "allow");
+
             const loadingOverlay = document.getElementById("loading-overlay");
             videoContainer.insertBefore(newVideo, loadingOverlay);
 
-            // 3. Recupero Stream
             const streamData = await getDirectStream(id, isMovie, season, episode);
-            if (!document.getElementById("player-video")) return; // Utente uscito
+            if (!document.getElementById("player-video")) return;
             if (!streamData || !streamData.m3u8Url) throw new Error("Stream non trovato");
 
-            // 4. Init Video.js
-            player = videojs("player-video", {
+            const isiOS = isIOS();
+            const playerOptions = {
                 controls: true,
                 fluid: true,
                 aspectRatio: "16:9",
                 html5: {
-                    vhs: { overrideNative: true, bandwidth: 10000000 },
-                    nativeAudioTracks: false,
-                    nativeVideoTracks: false,
+                    vhs: {
+                        overrideNative: !isiOS,
+                        bandwidth: 10000000
+                    },
+                    nativeAudioTracks: isiOS,
+                    nativeVideoTracks: isiOS,
                 },
-            });
+            };
+
+            player = videojs("player-video", playerOptions);
 
             player.src({ src: applyCorsProxy(streamData.m3u8Url), type: "application/x-mpegURL" });
 
-            // 5. EVENTI PLAYER (Qui c'è la magia del salvataggio/resume)
             player.ready(() => {
                 showLoading(false);
-                
-                // Volume
-                const savedVol = localStorage.getItem("vix_volume");
-                if (savedVol) player.volume(parseFloat(savedVol));
 
-                // AVVIA SISTEMA DI TRACCIAMENTO E RESUME
+                if (!isiOS) {
+                    const savedVol = localStorage.getItem("vix_volume");
+                    if (savedVol) player.volume(parseFloat(savedVol));
+                }
+
                 trackAndResume(player, id, isMovie ? 'movie' : 'tv', season, episode);
 
                 const playPromise = player.play();
                 if (playPromise !== undefined) {
-                    playPromise.catch(() => console.log("Autoplay bloccato"));
+                    playPromise.catch((e) => {
+                        console.log("Autoplay bloccato, richiesta interazione utente");
+                        showNotification("Tocca per riprodurre");
+                    });
                 }
             });
 
-            player.on('volumechange', () => {
-                localStorage.setItem("vix_volume", player.volume());
-            });
+            if (!isiOS) {
+                player.on('volumechange', () => {
+                    localStorage.setItem("vix_volume", player.volume());
+                });
+            }
 
         } catch (error) {
             console.error("❌ Errore player:", error);
